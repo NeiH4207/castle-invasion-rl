@@ -18,7 +18,7 @@ from argparse import ArgumentParser
 
 def argument_parser():
     parser = ArgumentParser()
-    parser.add_argument('--show-screen', type=bool, default=True)
+    parser.add_argument('-s', '--show-screen', action='store_true')
     parser.add_argument('--render', type=bool, default=True)
     parser.add_argument('--model-path', type=str, default='trained_models/nnet3.pt')
     parser.add_argument('--device', type=str, default='cuda')
@@ -28,12 +28,12 @@ def main():
     args = argument_parser()
     configs = json.load(open('configs/map.json'))
     env = AgentFighting(args, configs, args.show_screen)
-    n_observations = env.get_space_size()
+    observation_shape = env.get_space_size()
     n_actions = env.n_actions
     
     device = 'cuda' if torch.cuda.is_available() and args.device == 'cuda' else 'cpu'
     model = RainbowNet(
-        n_observations, 
+        observation_shape, 
         n_actions, 
         v_min=configs['v_min'],
         v_max=configs['v_max'],

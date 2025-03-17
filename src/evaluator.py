@@ -39,12 +39,13 @@ class Evaluator():
         rn1 = rn1 if rn1 > 0 else 0
         return (rn0, rn1)
         
-    def eval(self, old_model, new_model, change_elo=True):
+    def eval(self, old_model, new_model, using_prob=False):
         
         elo_1 = old_model.get_elo()
         elo_2 = new_model.get_elo()
         old_elo = elo_2
         num_wins = 0
+        total_scores = [0, 0]
         
         _tqdm = tqdm(range(self.n_evals), desc='Evaluating (Win 0/{})'.format(self.n_evals))
         for i in _tqdm:
@@ -52,46 +53,70 @@ class Evaluator():
             state = self.env.get_state()
             for cnt in count():
                 if state['player-id'] == 0:
+                    limit_obs_size = (new_model.observation_shape[1]+ 1 ) // 2
+                    state = self.env.get_state(limit_obs_size=limit_obs_size)
                     valid_actions = state['valid_actions']
                     torch_state = torch.FloatTensor(state['observation']).to(self.device)
                     act_values = new_model.predict(torch_state)[0]
                     if valid_actions is not None:
+                        act_values -= np.min(act_values)
                         act_values[~valid_actions] = -float('inf')
-                    action = int(np.argmax(act_values))
+                    if not using_prob:
+                        action = int(np.argmax(act_values))
+                    else:
+                        # sclaing the action values to avoid overflow
+                        probs = np.exp(act_values + 1e-10) / (np.sum(np.exp(act_values)) + 1e-10)
+                        probs = probs ** 4 / np.sum(probs ** 4)
+                        action = int(torch.multinomial(torch.tensor(probs), 1))
                 else:
+                    limit_obs_size = (old_model.observation_shape[1]+ 1 ) // 2
+                    state = self.env.get_state(limit_obs_size=limit_obs_size)
                     valid_actions = state['valid_actions']
                     torch_state = torch.FloatTensor(state['observation']).to(self.device)
                     act_values = old_model.predict(torch_state)[0]
                     if valid_actions is not None:
+                        act_values -= np.min(act_values)
                         act_values[~valid_actions] = -float('inf')
-                    action = int(np.argmax(act_values))
+                    if not using_prob:
+                        action = int(np.argmax(act_values))
+                    else:
+                        # sclaing the action values to avoid overflow
+                        probs = np.exp(act_values + 1e-10) / (np.sum(np.exp(act_values)) + 1e-10)
+                        probs = probs ** 4 / np.sum(probs ** 4)
+                        action = int(torch.multinomial(torch.tensor(probs), 1))
+                        
                 scores = self.env.state.scores
-                _tqdm.set_postfix_str(f'Scores: {scores[0]} / {scores[1]}')
-                next_state, _, done = self.env.step(action)
-                state = next_state
+                _, _, done = self.env.step(action)
+                
                 if done:
                     break
-            winner = self.env.get_winner()
-            if winner == 0:
+            scores = self.env.state.scores
+            _tqdm.set_postfix_str(f'Scores: {scores[0]} / {scores[1]}')
+            total_scores[0] += scores[0]
+            total_scores[1] += scores[1]
+            if scores[0] > scores[1]:
                 num_wins += 1
-            if winner == -1:
-                score = 0.5
-            else:
-                score = winner
-            _tqdm.set_description(f'Evaluating (Win {num_wins}/{self.n_evals})')
-            elo_1, elo_2 = self.compute_elo(elo_1, elo_2, score)
             if i < self.n_evals - 1:
                 self.env.reset()
-        
-        if change_elo:
-            old_model.set_elo(elo_1)
-            new_model.set_elo(elo_2)
-            logging.info('Elo changes from {} to {} | Win {}/{}'.\
-                format(old_elo, elo_2, num_wins, self.n_evals))
-        else:
-            won_player = 1 if num_wins <= self.n_evals - num_wins else 2
-            num_wins = num_wins if won_player == 2 else self.n_evals - num_wins
-        return num_wins / self.n_evals >= 0.55
+            _tqdm.set_description(f'Evaluating (Win {num_wins}/{self.n_evals})')
+
+            if (i + 1) % 10 == 0:
+                if total_scores[1] > total_scores[0]:
+                    score = 1
+                elif total_scores[0] == total_scores[1]:
+                    score = 0.5
+                else:
+                    score = 0
+                    
+                elo_1, elo_2 = self.compute_elo(elo_1, elo_2, score)
+                old_model.set_elo(elo_1)
+                new_model.set_elo(elo_2)
+                total_scores = [0, 0]
+                
+        logging.info('Elo changes from {} to {} | Win {}/{}'.\
+            format(old_elo, elo_2, num_wins, self.n_evals))
+            
+        return num_wins / self.n_evals >= 0.65
     
     
     def eval_pg(self, old_model, new_model, change_elo=True):

@@ -1,4 +1,5 @@
 
+from collections import deque
 import numpy as np
 from src.map import Map
 from copy import deepcopy as dcopy
@@ -18,7 +19,8 @@ class State(Map):
         self.alpha = 1 # effect of wall
         self.beta = 20 # effect of castle
         self.gamma = 5 # effect of territory
-        self.limit_obs_size = 10
+        self.limit_obs_size = 7
+        self.max_history = 10
         
         self.action_map = {
             ('Move', 'U'): 0,
@@ -48,6 +50,14 @@ class State(Map):
         }
         
         self.n_actions = len(self.action_map.values())
+        
+    def make_random_map(self):
+        self._make_random_map()
+        self.position_history = [[deque(maxlen=self.max_history) for _ in range(self.num_agents)] for _ in range(self.num_players)]
+        for player in range(self.num_players):
+            for agent in range(self.num_agents):
+                while len(self.position_history[player][agent]) < self.max_history:
+                    self.position_history[player][agent].append(self.agent_coords_in_order[player][agent])
         
     def hash_arr(self, arr: np.ndarray):
         s = ''.join([str(x) for x in arr.flatten()])
@@ -117,7 +127,9 @@ class State(Map):
     def terminal(self):
         return self.remaining_turns == 0
     
-    def get_state(self):
+    def get_state(self, limit_obs_size=None):
+        if limit_obs_size is None:
+            limit_obs_size = self.limit_obs_size
         # Standardized variable names to improve readability
         players = [self.current_player, self.current_player ^ 1]
         agent_board = self.agents[players]
@@ -141,16 +153,22 @@ class State(Map):
             axis=0
         )
         
+        for i in range(len(self.position_history[self.current_player][self.agent_current_idx])):
+            x, y = self.position_history[self.current_player][self.agent_current_idx][i]
+            agent_position = np.zeros(agent_board[0].shape)
+            agent_position[x, y] = 1
+            obs = np.concatenate([obs, [agent_position]], axis=0)
+        
         # Standardized variable names to improve readability and changed key name
         current_agent_idx = self.agent_current_idx
         current_agent_coord = self.agent_coords_in_order[self.current_player][current_agent_idx]
-        transision_vector = (self.limit_obs_size - 1 - current_agent_coord[0], 
-                             self.limit_obs_size - 1 - current_agent_coord[1])
+        transision_vector = (limit_obs_size - 1 - current_agent_coord[0], 
+                             limit_obs_size - 1 - current_agent_coord[1])
         for i, matrix in enumerate(obs):
             obs[i] = self.transition_matrix(matrix, transision_vector)
             
         # crop obs to limit_obs_size
-        obs = obs[:, :self.limit_obs_size*2-1, :self.limit_obs_size*2-1]
+        obs = obs[:, :limit_obs_size*2-1, :limit_obs_size*2-1]
         masked_obs = [(obs[0] != -1) * 1]
         obs = np.concatenate([obs, masked_obs], axis=0)
         agent_current_board[current_agent_coord[0], current_agent_coord[1]] = 1
@@ -378,6 +396,8 @@ class State(Map):
                 pass
             
             self.update_score()
+        
+        self.position_history[current_player][agent_current_idx].append(current_position)   
             
         self.agent_current_idx = (agent_current_idx + 1) % self.num_agents
         if self.agent_current_idx == 0:

@@ -44,7 +44,7 @@ class BaseNet(nn.Module):
             raise ValueError("Loss function not found")
         
     def predict(self, x: torch.Tensor) -> np.ndarray:
-        x = x.reshape(-1, self.n_observations)
+        x = x.reshape(-1, self.observation_shape)
         output = self.forward(x)
         return output.detach().cpu().numpy()
     

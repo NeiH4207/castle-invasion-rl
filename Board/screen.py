@@ -14,8 +14,8 @@ class Screen():
     def __init__(self, render=True):
         if render:
             pygame.init()
-            self.WIDTH = 500
-            self.HEIGHT = 500
+            self.WIDTH = 450
+            self.HEIGHT = 450
             self.LINE_WIDTH = 1
             self.SQUARE_SIZE = int(self.HEIGHT / 20)
             self.color_A = (255, 172,  88)
@@ -242,6 +242,6 @@ class Screen():
         
     def make_empty_square(self, coord):
         x, y = coord
-        self._make_empty_squares(2 + x * self.SQUARE_SIZE, 2 + y * self.SQUARE_SIZE,
-                           (self.SQUARE_SIZE - 2), (self.SQUARE_SIZE - 2))
+        self._make_empty_squares(1 + x * self.SQUARE_SIZE, 1 + y * self.SQUARE_SIZE,
+                           (self.SQUARE_SIZE - 1), (self.SQUARE_SIZE - 1))
         

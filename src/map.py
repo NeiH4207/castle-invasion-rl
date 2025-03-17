@@ -29,7 +29,7 @@ class Map(object):
                 if self.agents[1][i, j] == 1:
                     self.agent_coords_in_order[1].append((i, j))
     
-    def make_random_map(self):
+    def _make_random_map(self):
         self.agents = np.zeros((2, self.height_max, self.width_max), dtype=np.int8)
         self.walls = np.zeros((2, self.height_max, self.width_max), dtype=np.int8)
         self.castles = np.zeros((self.height_max, self.width_max), dtype=np.int8)
